@@ -12,6 +12,7 @@
         button:hover { background-color: #218838; }
         #result { margin-top: 30px; text-align: right; padding: 15px; border-top: 2px solid #eee; display: none; }
         .error { color: red; font-weight: bold; }
+        .loading { color: #007bff; font-weight: bold; }
         ul { list-style: none; padding: 0; }
         li { padding: 10px; border-bottom: 1px solid #f0f0f0; font-size: 16px; }
     </style>
@@ -29,45 +30,48 @@
 </div>
 
 <script>
-    // الرابط المباشر لملف الشيت الخاص بك بصيغة CSV
-    const sheetUrl = 'https://google.com' + new Date().getTime();
+    // الرابط المطور لجلب البيانات كـ JSON وتخطي حجب الحماية
+    const spreadsheetId = '1s05TaJQyxKAXdcDPpf5SYdUDNDsuYT2dxIB0K5l4lm0';
+    const jsonUrl = `https://google.com{spreadsheetId}/gviz/tq?tqx=out:json`;
 
     async function searchData() {
         const searchId = document.getElementById('idInput').value.trim();
         const resultDiv = document.getElementById('result');
-        resultDiv.style.display = 'none';
-        resultDiv.innerHTML = 'جاري البحث...';
-        resultDiv.style.display = 'block';
-
+        
         if (!searchId) {
             alert('الرجاء إدخال رقم السجل المدني');
-            resultDiv.style.display = 'none';
             return;
         }
 
-        try {
-            const response = await fetch(sheetUrl);
-            if (!response.ok) throw new Error('تعذر جلب الملف');
-            
-            const data = await response.text();
-            
-            // تقسيم السطور مع مراعاة الاختلافات البرمجية للأسطر
-            const rows = data.split(/\r?\n/).map(row => row.split(','));
-            if (rows.length === 0) return;
+        resultDiv.innerHTML = '<p class="loading">جاري جلب البيانات والبحث فوراً...</p>';
+        resultDiv.style.display = 'block';
 
-            // تنظيف أسماء الأعمدة (العناوين)
-            const headers = rows[0].map(h => h.replace(/^"|"$/g, '').trim());
+        try {
+            const response = await fetch(jsonUrl);
+            if (!response.ok) throw new Error('تعذر الوصول للملف');
+            
+            const text = await response.text();
+            
+            // تنظيف استجابة جوجل وتحويلها إلى كائن JSON حقيقي
+            const jsonString = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+            const data = JSON.parse(jsonString);
+            
+            const rows = data.table.rows;
+            const cols = data.table.cols;
+
+            // استخراج أسماء الأعمدة (العناوين)
+            const headers = cols.map((col, idx) => col.label || `العامود ${idx + 1}`);
             
             let foundRow = null;
 
-            // البحث في كل الصفوف
-            for (let i = 1; i < rows.length; i++) {
-                // تنظيف الخلايا من علامات الاقتباس الزائدة والمسافات
-                let cleanRow = rows[i].map(cell => cell.replace(/^"|"$/g, '').trim());
-                
-                // التحقق من مطابقة الرقم المدخل في أي خانة بالصف
-                if (cleanRow.some(cell => cell === searchId)) {
-                    foundRow = cleanRow;
+            // البحث داخل الصفوف
+            for (let row of rows) {
+                let matchFound = false;
+                let cellValues = row.c.map(cell => cell && cell.v !== null ? String(cell.v).trim() : '');
+
+                // التحقق من مطابقة الرقم المدخل في أي خلية من هذا الصف
+                if (cellValues.some(val => val === searchId)) {
+                    foundRow = cellValues;
                     break;
                 }
             }
@@ -76,7 +80,7 @@
                 let htmlContent = '<h3>نتائج البحث:</h3><ul>';
                 headers.forEach((header, index) => {
                     if(foundRow[index] !== undefined && foundRow[index] !== "") {
-                        htmlContent += `<li><strong>${header || 'معلومة'}:</strong> ${foundRow[index]}</li>`;
+                        htmlContent += `<li><strong>${header}:</strong> ${foundRow[index]}</li>`;
                     }
                 });
                 htmlContent += '</ul>';
@@ -87,7 +91,7 @@
 
         } catch (error) {
             console.error(error);
-            resultDiv.innerHTML = '<p class="error">حدث خطأ أثناء جلب البيانات.<br>تأكد من تطبيق خطوة "النشر على الويب" في قوقل شيت.</p>';
+            resultDiv.innerHTML = '<p class="error">حدث خطأ أثناء جلب البيانات.<br>تأكد أن ملف الشيت متاح "لأي شخص لديه الرابط" كعارض.</p>';
         }
     }
 </script>
