@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>منصة البحث بالسجل المدني</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 50px; text-align: center; background-color: #f4f7f6; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        input { width: 80%; padding: 10px; margin-bottom: 20px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; text-align: center; }
-        button { padding: 10px 20px; font-size: 16px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; text-align: center; background-color: #f4f7f6; }
+        .container { max-width: 600px; margin: 50px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        input { width: 85%; padding: 12px; margin-bottom: 20px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; text-align: center; }
+        button { padding: 12px 25px; font-size: 16px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; width: 90%; }
         button:hover { background-color: #218838; }
         #result { margin-top: 30px; text-align: right; padding: 15px; border-top: 2px solid #eee; display: none; }
         .error { color: red; font-weight: bold; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 10px; border-bottom: 1px solid #f0f0f0; font-size: 16px; }
     </style>
 </head>
 <body>
@@ -19,63 +21,73 @@
 <div class="container">
     <h2>نظام البحث بالسجل المدني</h2>
     <p>أدخل رقم السجل المدني المراد الاستعلام عنه:</p>
-    <input type="text" id="idInput" placeholder="مثال: 1023456789">
+    <input type="text" id="idInput" placeholder="أدخل رقم السجل هنا...">
     <br>
-    <button onclick="searchData()">بحث</button>
+    <button onclick="searchData()">بحث في السجلات</button>
 
     <div id="result"></div>
 </div>
 
 <script>
-    // رابط ملف قوقل شيت الخاص بك بصيغة CSV
-    const sheetUrl = 'https://google.com';
+    // الرابط المباشر لملف الشيت الخاص بك بصيغة CSV
+    const sheetUrl = 'https://google.com' + new Date().getTime();
 
     async function searchData() {
         const searchId = document.getElementById('idInput').value.trim();
         const resultDiv = document.getElementById('result');
         resultDiv.style.display = 'none';
-        resultDiv.innerHTML = '';
+        resultDiv.innerHTML = 'جاري البحث...';
+        resultDiv.style.display = 'block';
 
         if (!searchId) {
             alert('الرجاء إدخال رقم السجل المدني');
+            resultDiv.style.display = 'none';
             return;
         }
 
         try {
             const response = await fetch(sheetUrl);
+            if (!response.ok) throw new Error('تعذر جلب الملف');
+            
             const data = await response.text();
             
-            // تحويل بيانات CSV إلى مصفوفة
-            const rows = data.split('\n').map(row => row.split(','));
-            const headers = rows[0].map(h => h.trim());
+            // تقسيم السطور مع مراعاة الاختلافات البرمجية للأسطر
+            const rows = data.split(/\r?\n/).map(row => row.split(','));
+            if (rows.length === 0) return;
+
+            // تنظيف أسماء الأعمدة (العناوين)
+            const headers = rows[0].map(h => h.replace(/^"|"$/g, '').trim());
             
-            // البحث عن السجل المدني (نفترض أنه في العمود الأول أو يتم مطابقتة في أي عمود)
             let foundRow = null;
+
+            // البحث في كل الصفوف
             for (let i = 1; i < rows.length; i++) {
-                if (rows[i].some(cell => cell.trim() === searchId)) {
-                    foundRow = rows[i];
+                // تنظيف الخلايا من علامات الاقتباس الزائدة والمسافات
+                let cleanRow = rows[i].map(cell => cell.replace(/^"|"$/g, '').trim());
+                
+                // التحقق من مطابقة الرقم المدخل في أي خانة بالصف
+                if (cleanRow.some(cell => cell === searchId)) {
+                    foundRow = cleanRow;
                     break;
                 }
             }
 
-            resultDiv.style.display = 'block';
             if (foundRow) {
                 let htmlContent = '<h3>نتائج البحث:</h3><ul>';
                 headers.forEach((header, index) => {
-                    if(foundRow[index]) {
-                        htmlContent += `<li><strong>${header}:</strong> ${foundRow[index].trim()}</li>`;
+                    if(foundRow[index] !== undefined && foundRow[index] !== "") {
+                        htmlContent += `<li><strong>${header || 'معلومة'}:</strong> ${foundRow[index]}</li>`;
                     }
                 });
                 htmlContent += '</ul>';
                 resultDiv.innerHTML = htmlContent;
             } else {
-                resultDiv.innerHTML = '<p class="error">عذراً، لم يتم العثور على هذا السجل المدني.</p>';
+                resultDiv.innerHTML = '<p class="error">عذراً، لم يتم العثور على هذا السجل المدني في النظام.</p>';
             }
 
         } catch (error) {
             console.error(error);
-            resultDiv.style.display = 'block';
-            resultDiv.innerHTML = '<p class="error">حدث خطأ أثناء جلب البيانات. تأكد من صلاحيات مشاركة الملف.</p>';
+            resultDiv.innerHTML = '<p class="error">حدث خطأ أثناء جلب البيانات.<br>تأكد من تطبيق خطوة "النشر على الويب" في قوقل شيت.</p>';
         }
     }
 </script>
